@@ -1,0 +1,1 @@
+export const tgModuleGitlabPath = "wog/mha/ica-e-services/ica_common_services/app/aws_tg";

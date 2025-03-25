@@ -1,0 +1,459 @@
+openapi: 3.1.1
+info:
+  title: Unnamed backend - OpenAPI 3.1.1
+  description: |-
+    This is a sample Pet Store Server based on the OpenAPI 3.0 specification.  You can find out more about
+    Swagger at [https://swagger.io](https://swagger.io). In the third iteration of the pet store, we've switched to the design first approach!
+    You can now help us improve the API whether it's by making changes to the definition itself or to the code.
+    That way, with time, we can improve the API in general, and expose some of the new features in OAS3.
+
+    _If you're looking for the Swagger 2.0/OAS 2.0 version of Petstore, then click [here](https://editor.swagger.io/?url=https://petstore.swagger.io/v2/swagger.yaml). Alternatively, you can load via the `Edit > Load Petstore OAS 2.0` menu option!_
+    
+    Some useful links:
+    - [The Pet Store repository](https://github.com/swagger-api/swagger-petstore)
+    - [The source API definition for the Pet Store](https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml)
+  termsOfService: http://swagger.io/terms/
+  contact:
+    email: apiteam@swagger.io
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 0.0.1
+externalDocs:
+  description: Find out more about Swagger
+  url: http://swagger.io
+servers:
+  - url: http://localhost:3000/api/v0
+tags:
+  - name: tgModule
+    description: Terragrunt Modules
+  - name: file
+    description: Upload files
+paths:
+  /tg_modules:
+    get:
+      tags:
+        - tgModule
+      summary: Get terragrunt modules that are available
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {
+                  $ref: '#/components/schemas/TgModule'
+                }
+  /files:
+    get:
+      tags:
+        - file
+      summary: get all files
+      responses:
+        200:
+          description: successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {
+                  $ref: '#/components/schemas/UploadedFile'
+                }
+    post:
+      tags:
+        - file
+      summary: Upload file
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [uploadedFile, nodeId]
+              properties:
+                uploadedFile:
+                  type: string
+                  format: binary
+                nodeId:
+                  type: string
+            encoding:
+              uploadedFile:
+                contentType: text/*, application/*
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedFile'
+        400:
+          description: missing request body properties
+          content:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - file
+      summary: Delete all files (will only work in local env)
+      responses:
+        '204':
+          description: successful operation
+  /files/{id}:
+    get:
+      tags:
+        - file
+      summary: Download file by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Id of file
+          schema:
+            type: string
+          style: simple
+      responses:
+        200:
+          description: successful operation
+          content:
+            application/octet-stream:
+              type: string
+              format: binary
+
+    delete:
+      tags:
+        - file
+      summary: Delete file by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Id of file
+          schema:
+            type: string
+          style: simple
+      responses:
+        '204':
+          description: successful operation
+  /files/deleteByNodeId/{nodeId}:
+    delete:
+      tags:
+        - file
+      summary: Delete files by nodeId
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          description: nodeId
+          schema:
+            type: string
+          type: simple
+      responses:
+        '204':
+          description: successful operation
+
+  /projects/{id}/saveState:
+    put:
+      tags:
+        - project
+      summary: save the state of the flow for a given project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: id of project
+          schema:
+            type: string
+          type: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveState'
+      responses:
+        200:
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveState'
+        400:
+          description: bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /projects/{id}/getState:
+    get:
+      tags:
+        - project
+      summary: get the state of the flow for a given project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: id of project
+          schema:
+            type: string
+          type: simple
+      responses:
+        200:
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveState'
+        404:
+          description: project is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /projects/{id}/generateAndDownload:
+    get:
+      tags:
+        - project
+      summary: generate and download zip for a given project
+      description: |-
+        generate zip from existing state of the project
+        will return error if unable to generate
+        will return a zip if no issues
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: id of project
+          schema:
+            type: string
+          type: simple
+      responses:
+        200:
+          description: successful generate zip
+          content:
+            application/octet-stream:
+              type: string
+              format: binary
+
+
+
+components:
+  schemas:
+    PossibleInput:
+      type: object
+      required: ['name', 'type', 'default', 'required']
+      properties:
+        name:
+          type: string
+          description: Variable name of the input
+        type:
+          type: string
+          description: Variable type defined at module tf file
+        default:
+          nullable: true
+          description: Default variable value defined at module tf file of
+        required:
+          type: boolean
+          description: Indicate whether is variable is required
+
+    TgModule:
+      type: object
+      required: ['tgModuleName', 'possibleInputs']
+      properties:
+        tgModuleName:
+          type: string
+          description: |-
+            Path to the module from tg_modules folder
+            
+            Example:  
+            Gitlab url = `https://sgts.gitlab-dedicated.com/wog/mha/ica-e-services/ica_common_services/app/aws_tg/-/tree/master/tg-modules/acm-import`  
+            tgModule = `acm-import`
+        possibleInputs:
+          type: array
+          items: {
+            $ref: '#/components/schemas/PossibleInput'
+          }
+
+    UploadedFile:
+      type: object
+      required: ['id', 'name', 'isText', 'nodeId']
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        isText:
+          type: boolean
+        nodeId:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: ['error']
+      properties:
+        error:
+          type: string
+
+    MyNode:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        position:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+          required:
+            - x
+            - y
+        data:
+          type: object
+          properties:
+            label:
+              type: string
+            depth:
+              type: number
+            tgNodeType:
+              type: string
+            locals:
+              type: object
+              properties: { }
+              additionalProperties:
+                type: string
+              required: [ ]
+            inputs:
+              type: object
+              properties: { }
+              additionalProperties:
+                type: string
+              required: [ ]
+            files:
+              type: array
+              items:
+                type: object
+                properties:
+                  fileName:
+                    type: string
+                  fileId:
+                    type: string
+                required:
+                  - fileName
+                  - fileId
+          required:
+            - label
+            - depth
+            - tgNodeType
+        parentId:
+          type: string
+        extent:
+          type: string
+        measured:
+          type: object
+          properties:
+            width:
+              type: number
+            height:
+              type: number
+          required:
+            - width
+            - height
+        width:
+          type: number
+        height:
+          type: number
+        selected:
+          type: boolean
+        dragging:
+          type: boolean
+      required:
+        - id
+        - type
+        - position
+        - data
+        - measured
+
+    MyEdge:
+      type: object
+      properties:
+        markerEnd:
+          type: object
+          properties:
+            type:
+              type: string
+          required:
+            - type
+        zIndex:
+          type: number
+        source:
+          type: string
+        sourceHandle:
+          type: string
+        target:
+          type: string
+        targetHandle:
+          type: string
+        id:
+          type: string
+        selected:
+          type: boolean
+        data:
+          type: object
+          properties:
+            dependencyName:
+              type: string
+            enabled:
+              type: boolean
+          required:
+            -
+      required:
+        - zIndex
+        - source
+        - target
+        - id
+        - data
+
+    SaveState:
+      type: object
+      required: ['nodes', 'edges']
+      properties:
+        nodes:
+          type: array
+          items: {
+            $ref: '#/components/schemas/MyNode'
+          }
+        edges:
+          type: array
+          items: {
+            $ref: '#/components/schemas/MyEdge'
+          }
+        viewport:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+            zoom:
+              type: number
+          required:
+            - x
+            - y
+            - zoom
+
+
+  requestBodies: {}
+
+  securitySchemes:
+    bearerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerToken: []

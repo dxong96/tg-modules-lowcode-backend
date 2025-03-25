@@ -1,0 +1,6 @@
+uploads/
+sample/
+node_modules/
+.idea/
+
+*.txt
