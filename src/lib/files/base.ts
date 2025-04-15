@@ -14,7 +14,8 @@ export interface FileService {
 }
 
 export const LOCAL_UPLOAD_PATH = 'uploads/';
-export const upload = multer({ dest: LOCAL_UPLOAD_PATH });
+const TEMP_LOCAL_UPLOAD_PATH = 'uploads_tmp/'
+export const upload = multer({ dest: TEMP_LOCAL_UPLOAD_PATH });
 
 // todo add a env check to toggle between local file service and s3 file service
 export const fileUploadService: FileService = new LocalFileService();

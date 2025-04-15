@@ -7,6 +7,7 @@ import fsPromises from 'node:fs/promises';
 import fs from 'node:fs';
 import * as path from "node:path";
 import * as stream from "node:stream";
+import {basename, join} from "node:path";
 
 export class LocalFileService implements FileService {
     async deleteAll(): Promise<void> {
@@ -61,8 +62,11 @@ export class LocalFileService implements FileService {
             isTextFile = !!isText(null, buffer);
         }
 
+        const newFileLocation = join(LOCAL_UPLOAD_PATH, basename(uploadFile.fileLocation));
+        await fsPromises.rename(uploadFile.fileLocation, newFileLocation);
         const newUploadFile: UploadedFile = {
             ...uploadFile,
+            fileLocation: newFileLocation,
             isText: isTextFile,
             createdAt: Date.now()
         };
