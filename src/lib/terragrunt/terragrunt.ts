@@ -99,23 +99,8 @@ export function generateFilePaths(
   }
 
   for (const node of nodes) {
-    let folderName: string | undefined = node.data.label;
-    switch (node.data.tgNodeType) {
-      case TgModuleTypes.EnvironmentSettings:
-        folderName = node.data.locals?.["env_name"];
-        break;
-      case TgModuleTypes.RegionSettings:
-        folderName = node.data.locals?.["region"];
-        break;
-      case TgModuleTypes.ZoneSettings:
-        folderName = node.data.locals?.["zone_name"];
-        break;
-      case TgModuleTypes.TierSettings:
-        folderName = node.data.locals?.["tier_name"];
-        break;
-      default:
-    }
-    folderName = folderName?.trim();
+    const folderName = node.data.label;
+
     if (!folderName) {
       throw new Error(`Node ${node.data.label} does not have a valid path.`);
     }

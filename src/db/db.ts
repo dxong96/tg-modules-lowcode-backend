@@ -18,6 +18,10 @@ export async function connectToDb() {
     files: db.collection('files'),
     projects: db.collection('projects')
   };
+
+  return {
+    closeConn: () => client.close()
+  };
 }
 
 export function dbCollection<T extends keyof Collections>(collectionName: T): Collections[T] {

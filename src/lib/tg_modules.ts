@@ -37,7 +37,7 @@ async function findTgModulesInPath(tgModulesPath: string): Promise<TgModule[]> {
 
             console.log('current module name', name);
             const childrenTgModulesFlat = await findTgModulesInPath(tgModulePath);
-            console.log('childrenTgModulesFlat', JSON.stringify(childrenTgModulesFlat));
+            // console.log('childrenTgModulesFlat', JSON.stringify(childrenTgModulesFlat));
             childrenTgModulesFlat
                 .forEach(tgModule => {
                     tgModule.tgModuleName = `${name}/${tgModule.tgModuleName}`;
@@ -72,7 +72,7 @@ async function downloadAndExtractTgModules(): Promise<TgModule[]> {
     try {
         const zipPath = join(downloadedDirPath, 'archive.zip');
         await gitlabClient.downloadTgModulesAsZip(zipPath);
-        await extract(join(downloadedDirPath, 'archive.zip'), {
+        await extract(zipPath, {
             dir: downloadedDirPath
         });
         const downloadedChildren = await readdir(downloadedDirPath, { withFileTypes: true });

@@ -1,6 +1,9 @@
 uploads/
+uploads_tmp/
 sample/
 node_modules/
 .idea/
 
 *.txt
+
+test_regenerate/

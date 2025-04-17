@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "cross-env NODE_EXTRA_CA_CERTS=\"C:\\Users\\Administrator\\Downloads\\Cloudflare_CA_2.pem\" tsx watch -r dotenv/config ./src/index.ts",
+    "test-regen": "cross-env NODE_EXTRA_CA_CERTS=\"C:\\Users\\Administrator\\Downloads\\Cloudflare_CA_2.pem\" tsx -r dotenv/config .\\src\\test_regenerate.ts",
     "update-openapi": "npx openapi-typescript ./src/openapi/openapi.yaml -o ./src/openapi/schema.d.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -30,6 +31,7 @@
     "express": "^5.0.1",
     "extract-zip": "^2.0.1",
     "got": "^14.4.5",
+    "hcl2-parser": "^1.0.3",
     "istextorbinary": "^9.5.0",
     "jszip": "^3.10.1",
     "lodash-es": "^4.17.21",

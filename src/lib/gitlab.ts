@@ -28,4 +28,15 @@ export class GitlabClient {
             fs.createWriteStream(outputPath)
         );
     }
+
+    async downloadRepoAsZip(projectId: string, outputPath: string, ref?: string): Promise<void> {
+        let url = `v4/projects/${encodeURIComponent(projectId)}/repository/archive.zip`;
+        if (ref) {
+            url = `${url}?sha=${encodeURIComponent(ref)}`;
+        }
+        await streamPipeline(
+          this.gotClient.stream.get(url),
+          fs.createWriteStream(outputPath)
+        );
+    }
 }
