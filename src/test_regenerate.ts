@@ -1,7 +1,7 @@
 // Gitlab client START
 import {GitlabClient} from "./lib/gitlab.js";
 import extract from "extract-zip";
-import {basename, join, resolve} from "node:path";
+import {basename, join, relative, resolve} from "node:path";
 import {access, mkdir, readdir, rm, readFile} from "node:fs/promises"
 import {cwd} from "node:process";
 import {GetProjectStateResBody, MyEdge, MyNode} from "./api/v0/types.js";
@@ -10,7 +10,8 @@ import {TgNodeTypes} from "./lib/flow/types/TgNodeTypes.js";
 import hcl from "hcl2-parser";
 import {fileUploadService} from "./lib/files/base.js";
 import {connectToDb} from "./db/db.js";
-import {invert} from "lodash-es";
+import {chunk, invert} from "lodash-es";
+import crypto from "node:crypto";
 
 interface HclObject {
   include?: Record<string, {path: string}[]>,
@@ -106,7 +107,7 @@ async function main() {
     }
 
     usedIds.clear();
-    const resourceOutput = await extractData(join(projectRoot, folder.name));
+    const resourceOutput = await extractData(projectRoot, join(projectRoot, folder.name));
     output.nodes = output.nodes.concat(resourceOutput.nodes);
     // do a sanity check on the folder paths
     const nodeIds = Object.keys(resourceOutput.nodeIdToPath);
@@ -159,7 +160,7 @@ function reconcileEdges(extractedData: ExtractDataOutput): MyEdge[] {
   return edges;
 }
 
-async function extractData(folderPath: string, opts: ExtractDataOptions = {depth: 0, uploadedFileIdsTracker: []}): Promise<ExtractDataOutput> {
+async function extractData(projectRoot: string, folderPath: string, opts: ExtractDataOptions = {depth: 0, uploadedFileIdsTracker: []}): Promise<ExtractDataOutput> {
   const output: ExtractDataOutput = {
     nodes: [],
     tempEdges: [],
@@ -204,11 +205,34 @@ async function extractData(folderPath: string, opts: ExtractDataOptions = {depth
   }
 
   // 2. create the node
-  let id: string;
-  do {
+  let id: string = crypto.createHash("md5")
+    .update(relative(projectRoot, folderPath), "utf8")
+    .digest("hex");
+
+  while (usedIds.has(id)) {
     id = randomUUID();
-  } while (usedIds.has(id));
+  }
   usedIds.add(id);
+
+  // look for direct files and folders
+  const dirents = await readdir(folderPath, {
+    withFileTypes: true
+  });
+  const folders: string[] = [];
+  const files = new Set<string>();
+  for (const file of dirents) {
+    const path = join(folderPath, file.name);
+    if (file.isDirectory()) {
+      folders.push(path)
+    } else {
+      files.add(path);
+    }
+  }
+
+  // some resources might have child do a double check here
+  if (!isGroupNode && folders.length > 0) {
+    isGroupNode = true;
+  }
 
   let type: string;
   if (isGroupNode) {
@@ -225,21 +249,6 @@ async function extractData(folderPath: string, opts: ExtractDataOptions = {depth
   } else if (fileNameMap[hclFileName]) {
     // Account, Env, Region, Zone, Tier
     tgNodeType = fileNameMap[hclFileName];
-  }
-
-  // separate files and folders
-  const dirents = await readdir(folderPath, {
-    withFileTypes: true
-  });
-  const folders: string[] = [];
-  const files = new Set<string>();
-  for (const file of dirents) {
-    const path = join(folderPath, file.name);
-    if (file.isDirectory()) {
-      folders.push(path)
-    } else {
-      files.add(path);
-    }
   }
 
   let node: MyNode;
@@ -362,7 +371,11 @@ async function extractData(folderPath: string, opts: ExtractDataOptions = {depth
   }
 
   for (const folder of folders) {
-    const {nodes, tempEdges, nodeIdToPath} = await extractData(folder, {
+    const {
+      nodes,
+      tempEdges,
+      nodeIdToPath
+    } = await extractData(projectRoot, folder, {
       depth: opts.depth + 1,
       parentId: id,
       uploadedFileIdsTracker: opts.uploadedFileIdsTracker
@@ -378,43 +391,66 @@ async function extractData(folderPath: string, opts: ExtractDataOptions = {depth
       ...nodeIdToPath
     };
   }
-  // todo position child nodes for group nodes here
-  // todo total up the size here for group nodes
+  // resize the nodes
+  // position the nodes
+  // allow configuring number of columns when outputting
+  const maxColumnsPerGroup = 2;
   const padding = 30;
+  const firstRowYPadding = 55;
+
+  // set default dimension of node
+  node.measured.height = 54;
+  node.measured.width = 150;
+  Object.assign(node, node.measured);
+
   if (isGroupNode) {
     // for now, stack the nodes vertically
     let totalWidth = 0;
     let totalHeight = 0;
     const directChildren = output.nodes.filter(outputNode => outputNode.parentId === node.id);
-    for (const outputNode of directChildren) {
-      // console.log('child node size', node.measured.width, node.measured.height)
-      totalWidth = Math.max(totalWidth, outputNode.measured.width);
-      totalHeight += outputNode.measured.height;
+
+    if (directChildren.length > 0) {
+      let currentX = 0;
+      let currentY = 0;
+      let isFirstRow = true;
+      for (const smallChunk of chunk(directChildren, maxColumnsPerGroup)) {
+        const currentRowHeight = smallChunk.reduce((maxRowHeight, outputNode) =>
+          Math.max(maxRowHeight, outputNode.measured.height), 0);
+        const effectiveYPadding = isFirstRow ? firstRowYPadding : padding;
+        for (const outputNode of smallChunk) {
+          // position the node
+          outputNode.position.x = currentX + padding;
+          outputNode.position.y = currentY + effectiveYPadding;
+
+          currentX = outputNode.position.x + outputNode.measured.width;
+        }
+        currentY += effectiveYPadding + currentRowHeight;
+        currentX = 0;
+        isFirstRow = false;
+      }
+
+      // use the max x and max y to determine the total width and height
+      for (const outputNode of directChildren) {
+        totalWidth = Math.max(totalWidth, outputNode.measured.width + outputNode.position.x);
+        totalHeight = Math.max(totalHeight, outputNode.measured.height + outputNode.position.y);
+      }
+
+      // determine row and column count
+      // const rowCount = Math.ceil(directChildren.length / 2);
+      // const colCount = directChildren.length >= maxColumnsPerGroup ? maxColumnsPerGroup : directChildren.length;
+
+      // gap between nodes
+      // totalHeight += Math.max(0, (rowCount - 1) * padding);
+      // totalWidth += Math.max(0, (colCount - 1) * padding);
+
+      // add bottom paddings
+      totalWidth += padding;
+      totalHeight += padding;
+
+      node.measured.width = totalWidth;
+      node.measured.height = totalHeight;
+      Object.assign(node, node.measured);
     }
-    // gap between nodes
-    totalHeight += Math.max(0, (directChildren.length - 1) * padding);
-
-    // paddings
-    totalWidth += padding * 2;
-    totalHeight += padding * 2;
-
-    node.measured.width = totalWidth;
-    node.measured.height = totalHeight;
-    Object.assign(node, node.measured);
-
-    let currentX = 0;
-    let currentY = 0;
-    for (const outputNode of directChildren) {
-      // position the node
-      outputNode.position.x = currentX + padding;
-      outputNode.position.y = currentY + padding;
-
-      currentY = outputNode.position.y + outputNode.measured.height;
-    }
-  } else {
-    node.measured.height = 54;
-    node.measured.width = 150;
-    Object.assign(node, node.measured);
   }
 
   return output;

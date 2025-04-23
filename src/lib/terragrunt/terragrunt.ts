@@ -231,7 +231,7 @@ export async function generateZip(flowNodes: MyNode[], flowEdges: MyEdge[]) {
     files
       .map(async (file) => {
         folderZip.file(file.fileName,
-          fileUploadService.downloadFile(file.fileId));
+          await fileUploadService.downloadFile(file.fileId));
       })
       .forEach(pushFn);
   }

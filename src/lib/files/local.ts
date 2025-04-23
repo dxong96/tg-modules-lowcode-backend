@@ -7,7 +7,9 @@ import fsPromises from 'node:fs/promises';
 import fs from 'node:fs';
 import * as path from "node:path";
 import * as stream from "node:stream";
-import {basename, join} from "node:path";
+import {join} from "node:path";
+import {matches, pick} from "lodash-es";
+import crypto from "node:crypto";
 
 export class LocalFileService implements FileService {
     async deleteAll(): Promise<void> {
@@ -53,23 +55,58 @@ export class LocalFileService implements FileService {
     }
 
     async upload(uploadFile: Pick<UploadedFile, 'name' | 'fileLocation' | 'nodeId'>): Promise<WithId<UploadedFile>> {
-        let isTextFile = false;
-        const stats = await fsPromises.stat(uploadFile.fileLocation);
-        const fileSizeInBytes = stats.size;
-        const oneMb = 1024 * 1024;
-        if (fileSizeInBytes < oneMb) {
-            const buffer = await fsPromises.readFile(uploadFile.fileLocation);
-            isTextFile = !!isText(null, buffer);
+        const newFileName = await new Promise<string>((resolve) => {
+            const readable = fs.createReadStream(uploadFile.fileLocation);
+            const md5sum = crypto.createHash("md5");
+            readable.on('readable', () => {
+                const data = readable.read();
+                if (data) {
+                    md5sum.update(data);
+                } else {
+                    resolve(md5sum.digest("hex"));
+                }
+            });
+        });
+
+        const newFileLocation = join(LOCAL_UPLOAD_PATH, newFileName);
+        // check for existing record
+        const existingFileUploads = await dbCollection('files').find({
+            fileLocation: newFileLocation
+        }).toArray();
+        const existingFileUpload = existingFileUploads.find(matches(pick(uploadFile, ['name', 'fileLocation', 'nodeId'])));
+        if (existingFileUpload) {
+            return existingFileUpload;
         }
 
-        const newFileLocation = join(LOCAL_UPLOAD_PATH, basename(uploadFile.fileLocation));
-        await fsPromises.rename(uploadFile.fileLocation, newFileLocation);
-        const newUploadFile: UploadedFile = {
-            ...uploadFile,
-            fileLocation: newFileLocation,
-            isText: isTextFile,
-            createdAt: Date.now()
-        };
+        let newUploadFile: UploadedFile;
+        // not existing but there is a similar file
+        if (existingFileUploads.length > 0) {
+            const existing = existingFileUploads[0];
+            newUploadFile = {
+                ...uploadFile,
+                fileLocation: newFileLocation,
+                isText: existing.isText,
+                createdAt: Date.now()
+            };
+        } else {
+            // totally new
+            let isTextFile = false;
+            const stats = await fsPromises.stat(uploadFile.fileLocation);
+            const fileSizeInBytes = stats.size;
+            const oneMb = 1024 * 1024;
+            if (fileSizeInBytes < oneMb) {
+                const buffer = await fsPromises.readFile(uploadFile.fileLocation);
+                isTextFile = !!isText(null, buffer);
+            }
+            await fsPromises.rename(uploadFile.fileLocation, newFileLocation);
+            newUploadFile = {
+                ...uploadFile,
+                fileLocation: newFileLocation,
+                isText: isTextFile,
+                createdAt: Date.now()
+            };
+        }
+
         const result = await dbCollection("files").insertOne(newUploadFile);
         return {
             ...newUploadFile,
