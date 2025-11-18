@@ -196,7 +196,13 @@ async function extractData(projectRoot: string, folderPath: string, opts: Extrac
     } catch (e) {
       if (opts.depth === 0) {
         // todo replace this with a custom error for handling
-        throw Error('no hcl file found.');
+        // todo maybe need to have like a gitignore to ignore certain folders for cicd like bamboo-specs
+        // throw Error(`no hcl file found., folder path = ${folderPath}`);
+        return {
+          nodes: [],
+          nodeIdToPath: {},
+          tempEdges: []
+        };
       }
       hclFileName = "";
       isFolder = true;
@@ -291,7 +297,7 @@ async function extractData(projectRoot: string, folderPath: string, opts: Extrac
       const source = hclObject.terraform[0].source;
       const startIndex = source.indexOf(searchStr);
       if (startIndex === -1) {
-        throw Error('Invalid terraform source url');
+        throw Error(`Invalid terraform source url, folderPath=${folderPath}, source=${source}`);
       }
       tgNodeType = source.substring(startIndex + searchStr.length).replace(/\/\//g, "/");
     }
