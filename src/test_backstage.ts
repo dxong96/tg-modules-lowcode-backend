@@ -9,14 +9,16 @@ import YAML from "yaml";
 interface ResourceNodeBase {
     path: string;
     children: ResourceNode[];
+    error?: string;
 }
 
 type ResourceNode = ResourceNodeBase & (
     | {
-        error: string;
+        type: "hcl";
+        parsedHcl?: HclObject;
     }
     | {
-        parsedHcl: HclObject;
+        type: "folder";
     }
 )
 
@@ -57,13 +59,17 @@ async function main() {
     //     output.edges = output.edges.concat(edges);
     // }
 
-    const resourceNodes = await extractResourceNodes(projectRoot);
-    // console.log(JSON.stringify(resourceNodes, null, 2));
+    const resourceNode = await extractResourceNodes(projectRoot);
+    // console.log(JSON.stringify(resourceNode, null, 2));
     const {
         yaml: systemEntity,
         systemEntityRef
     } = makeSystemBackstageEntity("aws_interpro");
-    const resourceEntities = convertResourceNodeToBackstageEntity("aws_interpro", systemEntityRef, resourceNodes);
+    if (!resourceNode) {
+        return;
+    }
+
+    const resourceEntities = convertResourceNodeToBackstageEntity("aws_interpro", systemEntityRef, [resourceNode]);
     console.log('---');
     console.log(systemEntity);
     for (const entity of resourceEntities) {
@@ -72,15 +78,23 @@ async function main() {
     }
 }
 
-async function extractResourceNodes(folderPath: string, rootPath = folderPath) {
-    const result: ResourceNode[] = [];
+// each resource node represents a folder/hcl file in the project structure
+async function extractResourceNodes(folderPath: string, rootPath = folderPath): Promise<ResourceNode | null> {
     // look for hcl file in the folder
     const filesInFolder = await readdir(folderPath, {withFileTypes: true});
     const hclFiles = filesInFolder
         .filter(file => file.isFile() && file.name.endsWith(".hcl"));
-    const otherFolders = filesInFolder.filter(file => file.isDirectory());
+    const folders = filesInFolder.filter(file => file.isDirectory());
+    const currentFolderNode: ResourceNode = {
+        type: "folder",
+        children: [],
+        path: relative(rootPath, folderPath)
+    };
+    if (rootPath === folderPath) {
+        currentFolderNode.path = "./";
+    }
+
     for (const hclFile of hclFiles) {
-        let resourceNode: ResourceNode;
         let hclParseError: string | undefined;
         let hclObject: HclObject | undefined;
 
@@ -101,28 +115,36 @@ async function extractResourceNodes(folderPath: string, rootPath = folderPath) {
             }
         }
 
-
-        const childrenPromises = await Promise.all(
-            otherFolders
-                .map(folder => extractResourceNodes(join(folderPath, folder.name), rootPath))
-        );
-        const children = childrenPromises.reduce((acc, curr) => acc.concat(curr), []);
         if (hclParseError) {
-            resourceNode = {
+            currentFolderNode.children.push({
+                type: "hcl",
                 path: relative(rootPath, hclFilePath),
-                children: children,
+                children: [],
                 error: hclParseError
-            };
+            });
         } else {
-            resourceNode = {
+            currentFolderNode.children.push({
+                type: "hcl",
                 path: relative(rootPath, hclFilePath),
-                children: children,
+                children: [],
                 parsedHcl: hclObject!
-            };
+            });
         }
-        result.push(resourceNode);
     }
-    return result;
+
+
+    for (const folder of folders) {
+        const node = await extractResourceNodes(join(folderPath, folder.name), rootPath);
+        if (node) {
+            currentFolderNode.children.push(node);
+        }
+    }
+
+    if (currentFolderNode.children.length === 0) {
+        return null;
+    }
+
+    return currentFolderNode;
 }
 
 function makeSystemBackstageEntity(projectName: string) {
@@ -159,6 +181,7 @@ function convertResourceNodeToBackstageEntity(projectName: string, systemEntityR
             id = randomUUID();
         }
         usedIds.add(id);
+        const type = resourceNode.type === "hcl" ? "tg-module" : "folder";
         const namespace = normalizeEntityText(projectName);
         const backstageEntity = {
             "apiVersion": "backstage.io/v1alpha1",
@@ -166,13 +189,20 @@ function convertResourceNodeToBackstageEntity(projectName: string, systemEntityR
             "metadata": {
                 "name": id,
                 "title": resourceNode.path,
-                namespace
+                namespace,
+                annotations: {
+                    ...(resourceNode.type === "hcl" && resourceNode.parsedHcl && {
+                        "ncsappscloud.com/hcl-content": encodeURIComponent(JSON.stringify(resourceNode.parsedHcl))
+                    })
+                }
             },
             "spec": {
-                "type": "tg-module",
+                type,
                 "owner": "user:guest",
                 "lifecycle": "experimental",
-                "system": systemEntityRef,
+                ...(resourceNode.path === './' && {
+                    "system": systemEntityRef
+                }),
                 ...(parentName && {
                     "subcomponentOf": `component:${namespace}/${parentName}`
                 })
