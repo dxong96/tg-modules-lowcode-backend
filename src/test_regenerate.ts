@@ -13,21 +13,6 @@ import {connectToDb} from "./db/db.js";
 import {chunk, invert} from "lodash-es";
 import crypto from "node:crypto";
 
-interface HclObject {
-  include?: Record<string, {path: string}[]>,
-  locals?: Record<string, string | number | null>[],
-  inputs?: Record<string, string | number | null>,
-  dependency?: Record<string, {config_path: string}[]>,
-  terraform?: {
-    source: string;
-  }[];
-}
-
-type HclParseResult = [
-  null | HclObject,
-  null | Record<string, unknown>,
-];
-
 interface ExtractDataOptions {
   depth: number;
   uploadedFileIdsTracker: string[],
@@ -281,7 +266,7 @@ async function extractData(projectRoot: string, folderPath: string, opts: Extrac
     // console.log('hclFilePath', hclFilePath);
     // console.log('isFolder', isFolder);
     const content = await readFile(hclFilePath, "utf8");
-    const result: HclParseResult = hcl.parseToObject(content);
+    const result = hcl.parseToObject(content);
     if (!result?.[0]) {
       // todo replace this with a custom error for handling
       throw Error('One of the hcl file is invalid');
